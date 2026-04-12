@@ -1,0 +1,61 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      APP_ENV: development
+      SYSTEM_MODE: scaffold
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      DEFAULT_MARKET_PAIR: ${DEFAULT_MARKET_PAIR:-BTCUSD}
+      KRAKEN_MARKET_SOURCE: ${KRAKEN_MARKET_SOURCE:-live}
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-gpt-5.1}
+      ALLOWED_ORIGINS: http://localhost:5180,http://127.0.0.1:5180
+      API_KEY_FILE: ${API_KEY_FILE:-/run/secrets/api_key.conf}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      PYTHONPATH: /workspace
+    ports:
+      - "8002:8000"
+    volumes:
+      - .:/workspace
+      - ./api_secret:/run/secrets:ro
+    working_dir: /workspace
+    networks:
+      - workstation
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: development
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8002/api
+      VITE_DEV_HOST: 0.0.0.0
+      VITE_DEV_PORT: 5173
+    ports:
+      - "5180:5173"
+    volumes:
+      - .:/workspace
+      - frontend_node_modules:/workspace/frontend/node_modules
+    working_dir: /workspace/frontend
+    depends_on:
+      - backend
+    networks:
+      - workstation
+
+networks:
+  workstation:
+    driver: bridge
+
+volumes:
+  frontend_node_modules:

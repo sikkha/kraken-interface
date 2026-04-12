@@ -1,0 +1,230 @@
+# Current Status
+
+- Repository has moved from a minimal Kraken CLI proof of concept to a small full-stack scaffold.
+- Backend now exists as a FastAPI app under `backend/` with health, market snapshot, chat, and system state endpoints.
+- Frontend now exists as a React workstation shell under `frontend/`.
+- Docker Compose is now the intended standard runtime boundary for local backend/frontend development.
+- Existing root Kraken files remain the current live-compatible market-reading path:
+  - `client.py`
+  - `parser.py`
+  - `errors.py`
+- Market snapshots default to `mock` mode unless `KRAKEN_MARKET_SOURCE=live` is set.
+- In live mode, the backend now attempts real Kraken CLI ticker reads through the adapter layer and preserves the same frontend snapshot schema.
+- Backend now also exposes read-only normalized candle history through `/api/market/candles`.
+- Candle endpoint now supports operator-facing time presets through frontend interval/limit mapping rather than exposing raw Kraken controls directly.
+- If a live Kraken read fails, the backend logs the failure and serves a scaffold-safe mock fallback instead of crashing the endpoint.
+- Containerized development bind-mounts the repo so `dev_mem/` and `library/` remain normal first-class workspace assets.
+- Frontend uses a named Docker volume for `node_modules` to avoid host/container conflicts.
+- Compose host ports are configurable through `BACKEND_PORT` and `FRONTEND_PORT`.
+- Frontend API wiring now explicitly accepts the flat market and system JSON returned by the backend, while tolerating simple future envelopes.
+- AI chat is routed through `library/llm_handler.py` with a safe fallback when provider credentials are missing.
+- FastAPI CORS now allows standard local dev origins by regex so browser GET requests and chat preflight do not depend on one fixed frontend port.
+- `library/llm_handler.py` now supports direct env-var key injection plus optional file-based injection through `API_KEY_FILE` or `API_KEY_FILE_PATH`.
+- Docker backend mounts repo-local `./api_secret` read-only at `/run/secrets` and can read `/run/secrets/api_key.conf` if provided.
+- Backend Docker image installs its own Kraken CLI and does not depend on host shell initialization such as `source $HOME/.cargo/env`.
+- Container runtime remains honest: missing secrets still fall back safely, and Docker live Kraken mode only counts as ready after explicit verification.
+- The main market panel now renders a real BTCUSD candlestick chart from the candle endpoint instead of a static placeholder.
+- The chart now supports 1D, 3D, 5D, 1M, and 3M presets plus candlestick, line, area, and trend styles.
+- Backend now has a first serious paper trading loop foundation for single-asset BTCUSD.
+- The backend trading foundation now supports both manual `run-once` orchestration and a background paper loop runner.
+- Kraken candles can now feed a deterministic feature layer outside the notebook.
+- A structured BTCUSD signal object now exists with:
+  - signal side
+  - confidence
+  - target weight
+  - model version
+  - feature summary
+- Signal runtime is now artifact-aware:
+  - backend can load a packaged GRU artifact if one exists at the configured artifact path
+  - current fallback remains explicit when the artifact is missing or invalid
+- A validated BTCUSD GRU artifact now exists at:
+  - `artifacts/signal_engine/btcusd_gru_packaged.json`
+- Current live Docker paper-engine inference now runs as `gru_packaged`:
+  - artifact loading succeeds
+  - runtime NumPy inference succeeds
+  - engine status updates to `gru_packaged`
+  - `run-once` uses the packaged artifact on the live paper path
+- The runtime fallback path still exists and remains explicit if the artifact is missing, invalid, or fails at inference time.
+- Current signal engine observability now exposes:
+  - engine type
+  - model version
+  - artifact status
+  - artifact loaded boolean
+  - artifact path
+  - runtime note
+  - confidence method
+- Algorithm verification now confirms where the old allocator-like behavior came from:
+  - the packaged model predicts current MACD, not future return or allocation directly
+  - the notebook itself uses `sequence_length = 1`, so the packaged one-step GRU is faithful to notebook structure
+  - the packaged artifact is faithful to the notebook model core, but not to the full cross-asset notebook strategy
+  - the main degeneracy is introduced by downstream signal/confidence/target-weight mapping rather than by sequence collapse alone
+- Current packaged model is best interpreted as:
+  - a regime / trend-confirmation model
+  - used as a dynamic long/flat exposure input rather than a direct trading policy
+- The fixed `buy / 1.0 / 0.25` collapse has now been replaced by a dynamic portfolio-control policy:
+  - signal service now emits bounded `regime_score`, calibrated `confidence`, dynamic `target_weight`, and `exposure_state`
+  - risk service now compares target weight vs current BTC weight and decides `increase`, `hold`, `reduce`, or `flatten`
+  - paper execution now supports partial reductions as well as full flattening
+  - engine cycle outcomes can now show `rebalance_not_needed` and `execution:flatten` rather than only capped-allocation top-ups
+- The dynamic controller now also avoids the newer binary flat/long collapse:
+  - mildly negative regime windows can now map to small exploratory long exposure instead of forcing `0.0`
+  - fresh live Docker verification now shows packaged GRU runs with non-zero target weights around `3.8%` under weakly bearish conditions
+  - first clean-cycle behavior can now be `increase -> filled`, followed by deadband `hold` rather than all-flat noop sequences
+- The paper engine now supports a first multi-asset portfolio workflow:
+  - scans a curated liquid 10-symbol Kraken USD candidate universe
+  - computes volatility, liquidity, beta-to-BTC, trend quality, and regime-alignment scores
+  - selects only the top 2-3 symbols for active allocation
+  - assigns portfolio target weights jointly with explicit residual cash
+- Current clean Docker verification selected:
+  - `BTCUSD`
+  - `ETHUSD`
+  - `AVAXUSD`
+  - with gross target weight around `25.3%` and cash reserve around `74.7%`
+- Multi-asset portfolio accounting bug is now fixed:
+  - paper cash no longer explodes across sequential multi-asset fills
+  - portfolio equity is now rebuilt from cash plus per-symbol quantity * latest price
+  - execution accounting now treats `market_value` as derived output instead of a canonical sizing input
+  - fresh reset + live Docker verification now shows sane equity around the configured `10000` paper account rather than impossible eight-figure values
+  - controlled sell verification now also shows cash increasing on reduction fills and realized pnl updating correctly
+- Current live Docker verification shows the new control behavior is real:
+  - fresh live `run-once` can now produce a true flat/hold cycle when the regime score falls below the flat threshold
+  - a seeded live BTC paper position flattened correctly when the target dropped to `0.0`
+  - deterministic service-level checks confirmed `increase`, `reduce`, and `flatten` paths without changing the architecture
+- A deterministic risk gate now sits between signal and execution with:
+  - confidence threshold
+  - max position size
+  - cooldown
+  - spread check
+  - abnormal-volatility placeholder hook
+- Paper execution contracts now exist for:
+  - execution request
+  - execution result
+  - portfolio state
+  - position state
+  - pnl state
+- Paper execution remains paper-only and long/flat only, and now supports multiple concurrent symbols from the curated universe.
+- Current portfolio accounting invariant is now enforced in code:
+  - `portfolio_value = cash_usd + sum(position.quantity * position.market_price)`
+  - invariant failures now raise immediately instead of silently writing corrupted state
+- Latest signal, risk, execution, and portfolio state are now persisted in lightweight JSON under `runtime_state/`.
+- Historical paper-engine records now also persist in SQLite at `runtime_state/experiment_ledger.sqlite3`.
+- Successful cycles now append durable records for:
+  - cycle summary
+  - per-symbol signals across the scanned universe
+  - per-symbol risk decisions for selected or currently-held assets
+  - per-symbol execution results
+  - portfolio snapshot
+- Failed cycles now append a cycle-history row with error context instead of disappearing from traceability.
+- Backend exposes trading loop inspection routes:
+  - `GET /api/trading/status`
+  - `POST /api/trading/run-once`
+- Backend now also exposes operational paper-engine routes:
+  - `GET /api/engine/status`
+  - `POST /api/engine/run-once`
+  - `POST /api/engine/start`
+  - `POST /api/engine/stop`
+  - `POST /api/engine/reset`
+- A background paper loop runner now exists for BTCUSD and can be started and stopped safely.
+- Engine state is now persisted separately from portfolio state so the workstation can show:
+  - running or stopped
+  - paper mode
+  - interval
+  - last cycle status
+  - cycle count
+  - signal engine type
+  - signal model version
+  - initial paper capital
+  - portfolio source
+  - reset timestamp
+  - total execution/noop/rejection counts
+- The frontend workstation now includes real operator controls for:
+  - run once
+  - start
+  - stop
+  - reset experiment
+  - loop interval selection
+- Frontend now includes a persisted dark/light mode toggle with dark mode as the default.
+- The frontend now also surfaces:
+  - latest signal
+  - latest risk decision
+  - latest execution
+  - portfolio value
+  - realized and unrealized pnl
+  - BTC position state
+- Engine and signal cards now use more readable key/value rows and clearer spacing instead of dense metadata blocks.
+- Operator semantics are now spelled out in the UI and docs:
+  - `Run Once` = exactly one full cycle
+  - `Start` = continuous looping at the configured interval
+  - `Stop` = stop future cycles and keep current state
+  - paper portfolio state persists unless reset
+- Chat prompt construction now includes lightweight structured trading-engine context.
+- Event logging now includes:
+  - engine start
+  - cycle started
+  - signal creation
+  - risk decision
+  - paper execution result
+  - portfolio update
+  - cycle finished or failed
+  - engine stopped
+- Backend now also exposes read-only ledger history routes:
+  - `GET /api/history/cycles`
+  - `GET /api/history/signals`
+  - `GET /api/history/risk-decisions`
+  - `GET /api/history/executions`
+  - `GET /api/history/portfolio`
+- Frontend now includes a compact experiment history panel with:
+  - recent cycle outcomes
+  - recent executions
+  - a small equity trace from portfolio snapshots
+  - visible SQLite ledger path
+- Frontend engine surfaces now also expose:
+  - selected active assets
+  - candidate categories and scores
+  - per-asset target weights
+  - multiple open paper positions
+- Portfolio observability now includes:
+  - backend-provided composition rows with cash reserve, actual weights, target weights, market values, and unrealized pnl
+  - a compact cash-inclusive composition donut
+  - a per-asset unrealized pnl contribution block
+  - a target-vs-actual weight comparison block
+  - lightweight last-fill reference and mark-vs-fill bps for open positions when available
+- SQLite persistence boundary is now explicitly verified:
+  - configured ledger path is `runtime_state/experiment_ledger.sqlite3`
+  - inside the backend container that resolves to `/workspace/runtime_state/experiment_ledger.sqlite3`
+  - on the host that resolves to `/Users/kan/code/kraken-interface/runtime_state/experiment_ledger.sqlite3`
+  - Docker sees the same file because the repo root is bind-mounted to `/workspace`
+  - restart/rebuild preserves the DB unless the host file is removed
+- SQLite history now records packaged runs distinctly because signal rows include:
+  - engine type
+  - model version
+  - artifact status
+- SQLite history now also records dynamic portfolio-control fields so later analysis can distinguish:
+  - target weight vs current weight
+  - rebalance gap
+  - exposure state
+  - action policy
+  - flatten vs hold vs other outcomes
+- SQLite history remains multi-asset-compatible through `positions_json`; legacy `btc_qty` helper columns are no longer treated as authoritative accounting state
+- Reset Experiment now produces a truly fresh run boundary:
+  - stops the engine safely
+  - resets portfolio state to initial paper capital
+  - clears latest-state JSON artifacts
+  - wipes and recreates the SQLite ledger
+  - leaves history endpoints empty until new cycles are produced
+- Reset trust hardening is now verified in Docker:
+  - ledger counts dropped from populated history to `0`
+  - history endpoints returned empty arrays immediately after reset
+  - a fresh `run-once` recreated usable ledger rows cleanly
+- UI history and equity trust boundary is now improved:
+  - after reset, the history panel and equity trace are fresh because the ledger is empty and then repopulates from the new run only
+  - latest-state engine/signal/risk/execution/portfolio cards remain safe because they come from JSON latest-state
+- Engine labeling is now cleaner and more future-safe:
+  - active signal engine id is exposed explicitly
+  - fallback signal engine path is exposed separately
+  - active packaged GRU status, model version, artifact status, and runtime note are visible without stale notebook wording in the operator-facing engine view
+- Backend strategy adapter labeling is now also truthful:
+  - system-state strategy adapter mode now reports the active packaged GRU path when the artifact is loaded
+  - fallback capability remains visible as a separate note rather than masquerading as the active engine
+- No live order execution or real-money account integration is implemented.
+- Candidate discovery is still curated and explicit in this milestone rather than dynamic exchange-wide scanning.

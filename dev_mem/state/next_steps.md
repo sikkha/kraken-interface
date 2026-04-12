@@ -1,0 +1,72 @@
+# Next Steps
+
+- Decide whether the validated BTCUSD artifact should now be treated as the default committed demo artifact or regenerated on a fixed cadence.
+- Add a lightweight regression check that compares PyTorch export predictions against NumPy runtime predictions so future runtime edits do not drift again.
+- Investigate why host-side live export still fell back to mock candles in this shell, even though Docker live export succeeded.
+- Measure the new dynamic long/flat controller over longer live paper runs:
+  - distribution of exposure states
+  - distribution of target-weight bands
+  - frequency of `increase`, `reduce`, `flatten`, and `hold`
+  - realized turnover vs pnl
+- Measure the new multi-asset selector over longer fresh-reset runs:
+  - selected-symbol stability
+  - category mix
+  - gross exposure distribution
+  - cash-reserve behavior
+  - per-symbol contribution to pnl
+- Decide whether the current curated 10-symbol universe should stay fixed or later become a lightly configurable major-asset list.
+- Add targeted regression tests for multi-asset paper accounting:
+  - buy cash decrease
+  - sell cash increase
+  - average entry updates
+  - realized pnl updates
+  - invariant preservation across sequential multi-asset fills
+- Decide whether portfolio observability should later add:
+  - realized pnl attribution by symbol
+  - target-vs-actual history over time
+  - turnover and execution-cost summaries
+  - a stacked cash-vs-deployed equity history view
+- Revisit universe category thresholds so `ETHUSD` / `AVAXUSD` labeling becomes more intuitive once more history exists.
+- Decide whether portfolio allocation should keep the current score-proportional mapping or move to a slightly stronger gross-exposure budget once live paper evidence accumulates.
+- Decide whether the current continuous exposure ramp should stay linear or move to a more curved / banded mapping once more clean fresh-run data exists.
+- Check whether the confidence threshold for `increase` still needs tuning now that mildly bearish regimes can map to exploratory long exposure instead of `0.0`.
+- Add a small history/equity annotation or filter so later operator analysis can distinguish exploratory-long phases from stronger conviction phases at a glance.
+- Add explicit experiment/run/phase IDs to the ledger so future resets can preserve historical experiments cleanly while still giving each new run an unambiguous scope.
+- Decide whether history UI should eventually support:
+  - current experiment only
+  - prior experiments
+  - or both with an operator filter
+- Revisit notebook target design if the goal shifts from regime-confirmation portfolio control toward a more forward-looking trading signal.
+- Decide whether the current packaged GRU should remain a one-step gated regressor or whether a true temporal sequence model is needed in a later notebook/model redesign
+- Decide whether de-risk behavior should stay long/flat only or eventually expand into shorting after the long/flat controller is measured and stable.
+- Decide whether experiment reset should eventually support both:
+  - hard fresh-run wipe of SQLite history
+  - optional archived prior-run preservation
+- Add small analytics on top of the SQLite ledger:
+  - equity curve summaries
+  - per-symbol exposure charts
+  - exposure-state counts
+  - rebalance action counts
+  - universe selection frequency
+  - recent rejection rates
+  - execution win/loss summaries
+- Decide whether the current loop runner should stay in-process or move to a more durable worker boundary when paper uptime expectations increase.
+- Add tests around feature engineering, risk decisions, paper fills, and persistence behavior.
+- Decide whether to remove or fully deprecate legacy `btc_qty` / `avg_entry_price` ledger columns now that `positions_json` is the authoritative multi-asset snapshot.
+- Add targeted tests for:
+  - deadband hold behavior
+  - partial reduction fills
+  - flatten fills
+  - ledger row shape for dynamic action policies
+- Add stronger fallback/status language so the operator UI can distinguish:
+  - requested live mode
+  - actual live read success
+  - mock fallback
+- Decide whether current in-memory event logs should also be written into SQLite once operator event-history needs become clearer.
+- Keep Docker live Kraken verification in the release checklist, since host and container runtime behavior can diverge.
+- Decide whether the export tool should remain a one-off optional environment or become its own reproducible Docker target.
+- Decide whether the chart and engine panels should share a single market snapshot timestamp once operator timing expectations are clearer.
+- Decide whether reset should support preserving counters while only flattening paper positions for some experiment workflows.
+- Consider a small frontend pass for system/event cards so the new light theme has the same polish as the engine panel.
+- Leave account reads and real-money execution out until the paper loop is measured and stable.
+- Keep chart/UI focus on BTCUSD for now while deciding whether the next workstation pass should add a compact selected-asset mini-chart or relative-performance strip.

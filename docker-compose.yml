@@ -1,0 +1,43 @@
+services:
+  backend:
+    image: ${DOCKERHUB_USER:-local}/mekong-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      additional_contexts:
+        workspace: .
+    environment:
+      APP_ENV: production
+      SYSTEM_MODE: scaffold
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      DEFAULT_MARKET_PAIR: ${DEFAULT_MARKET_PAIR:-BTCUSD}
+      KRAKEN_MARKET_SOURCE: ${KRAKEN_MARKET_SOURCE:-live}
+      KRAKEN_API_KEY: ${KRAKEN_API_KEY:-}
+      KRAKEN_API_SECRET: ${KRAKEN_API_SECRET:-}
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-gpt-5.1}
+      ALLOWED_ORIGINS: ${FRONTEND_PUBLIC_ORIGIN:-http://34.143.201.25:5180}
+      ALLOWED_ORIGIN_REGEX: ${ALLOWED_ORIGIN_REGEX:-}
+      API_KEY_FILE: ${API_KEY_FILE:-/run/secrets/api_key.conf}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+    ports:
+      - "8002:8000"
+
+  frontend:
+    image: ${DOCKERHUB_USER:-local}/mekong-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://34.143.201.25:8002/api}
+    ports:
+      - "5180:5173"
+    depends_on:
+      - backend

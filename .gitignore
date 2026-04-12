@@ -1,0 +1,13 @@
+api_secret/
+docker/secrets/
+runtime_state/
+.venv-signal-export/
+__pycache__/
+*.py[cod]
+.DS_Store
+frontend/node_modules/
+frontend/dist/
+.obsidian/
+dev_mem/.obsidian/
+*.bkp
+compose.yaml,bkp

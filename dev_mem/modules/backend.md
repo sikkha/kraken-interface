@@ -1,0 +1,134 @@
+# Backend Module
+
+Location: `backend/`
+
+Responsibilities:
+
+- Provide API routes for health, market state, chat, and backend readiness.
+- Normalize and expose market snapshot data through stable schemas.
+- Wrap `library/llm_handler.py` for AI chat without bloating the library entry point.
+- Hold integration seams for exchange reads, execution writes, and strategy inputs.
+- Orchestrate the first operational paper trading engine for BTCUSD.
+
+Current state:
+
+- FastAPI bootstrap in `backend/app/main.py`
+- Routes grouped under `backend/app/api/routes/`
+- Schemas grouped under `backend/app/schemas/`
+- Services grouped under `backend/app/services/`
+- Exchange and future engine seams grouped under `backend/app/adapters/`
+- Market service preserves the flat snapshot contract while switching between mock and Kraken CLI live reads based on `KRAKEN_MARKET_SOURCE`
+- Market service now also exposes normalized OHLC candles through a read-only candle endpoint without changing the frontend workstation contract shape elsewhere
+- Candle endpoint accepts interval and limit inputs so the frontend can map operator presets to sensible Kraken-compatible requests
+- Live market read failures are logged and downgraded to scaffold-safe mock responses instead of surfacing as endpoint crashes
+- Trading routes now exist for backend-first loop observability:
+  - `GET /api/trading/status`
+  - `POST /api/trading/run-once`
+- Engine routes now exist for operational control:
+  - `GET /api/engine/status`
+  - `POST /api/engine/run-once`
+  - `POST /api/engine/start`
+  - `POST /api/engine/stop`
+  - `POST /api/engine/reset`
+- Feature engineering now lives outside the notebook in `backend/app/services/feature_service.py`
+- Signal generation now lives in `backend/app/services/signal_service.py`
+- Packaged signal-engine runtime now lives in `backend/app/signal_engine/`
+- Risk gating now lives in `backend/app/services/risk_service.py`
+- Paper execution and portfolio marking now live in `backend/app/services/paper_execution_service.py`
+- Lightweight JSON persistence now lives in `backend/app/services/state_store.py`
+- Lightweight SQLite ledger persistence now lives in `backend/app/services/history_ledger.py`
+- Trading loop orchestration now lives in `backend/app/services/trading_loop_service.py`
+- Background engine lifecycle management now lives in `backend/app/services/engine_service.py`
+- Engine status is now intentionally operator-facing and exposes experiment semantics, persistence origin, initial capital, and reset metadata directly
+- Engine status now distinguishes:
+  - active signal engine id
+  - fallback signal engine id
+  - model version
+  - artifact status
+  - runtime note
+- Engine status now also provides a backend-owned `portfolio_composition` view with:
+  - actual weight
+  - target weight
+  - market value
+  - unrealized pnl
+  - cash reserve share
+  - lightweight last-fill reference data
+- Current signal runtime is artifact-aware and can promote to packaged GRU inference when a valid artifact is present
+- Current live Docker engine now runs `gru_packaged` using a validated artifact at `artifacts/signal_engine/btcusd_gru_packaged.json`
+- Explicit fallback still exists if packaged loading or runtime inference fails
+- Current algorithm audit clarifies the packaged-model boundary:
+  - packaged runtime is faithful to the notebook GRU predictor core
+  - exported target is current MACD
+  - runtime output is then reinterpreted by a separate signal/confidence/target-weight policy layer
+  - the full notebook cross-asset allocation semantics are not preserved in the single-asset paper engine
+- Signal policy now uses packaged GRU output as a dynamic long/flat exposure input rather than collapsing every strong bullish reading into a fixed capped allocation
+- Signal policy now uses a continuous exposure ramp rather than either:
+  - collapsing every bullish reading into a fixed cap
+  - collapsing mildly bearish / near-neutral readings straight to `0.0`
+- Risk service now performs rebalance-style portfolio control:
+  - compare target BTC weight vs current BTC weight
+  - increase when the gap is materially positive
+  - reduce when the gap is materially negative
+  - flatten when target exposure drops to flat
+  - hold when the gap is inside the configured deadband
+- Paper execution now supports partial sell-downs as well as full flattening
+- Paper execution accounting is now explicitly multi-asset-correct:
+  - buy reduces cash by executed notional and increases only the requested symbol quantity
+  - sell increases cash by proceeds, decreases only the requested symbol quantity, and realizes pnl from exit price vs cost basis
+  - portfolio equity is rebuilt from cash plus per-symbol quantity * latest price after every fill
+  - cached `market_value` is treated as derived reporting state rather than canonical accounting input
+- Engine cycle outcomes and SQLite history can now distinguish:
+  - `rebalance_not_needed`
+  - `execution:increase`
+  - `execution:reduce`
+  - `execution:flatten`
+- Risk, execution, and signal contracts now expose:
+  - target weight
+  - current weight
+  - rebalance gap
+  - exposure state
+  - action policy / policy reason
+- Signal summaries now also expose:
+  - normalized score
+  - policy band
+  - calibrated confidence method
+- Chat prompt construction now pulls lightweight trading-engine context from persisted state
+- Full experiment reset now wipes and recreates the SQLite ledger so the next run starts from empty history
+- History routes now exist for durable experiment retrieval:
+  - `GET /api/history/cycles`
+  - `GET /api/history/signals`
+  - `GET /api/history/risk-decisions`
+  - `GET /api/history/executions`
+  - `GET /api/history/portfolio`
+- Docker image defined in `backend/Dockerfile`
+- Compose service runs uvicorn with reload in a container and bind-mounts the repo at `/workspace`
+- Backend container accepts secrets through env vars or `/run/secrets/api_key.conf` mounted from repo-local `api_secret/`
+- Backend image installs its own Kraken CLI and Python dependencies instead of inheriting host runtime state
+- Optional GRU export dependencies are tracked separately in `backend/requirements-signal-export.txt` so normal runtime image requirements stay lean
+
+Boundary:
+
+- Route handlers should stay thin.
+- Exchange-specific logic should remain inside adapters.
+- Notebook research code should stay separate from runtime inference code.
+- Runtime inference should be able to load a packaged artifact without importing notebook code.
+- Runtime inference should fail safely back to `notebook_proxy` rather than crashing the paper engine if packaged inference breaks.
+- Algorithm verification should keep distinguishing:
+  - model target meaning
+  - signal policy meaning
+  - risk/execution behavior
+- Strategy, risk, and execution contracts should not leak exchange-specific parsing into routes.
+- Paper execution should remain clearly separated from future real-money execution.
+- The operational loop runner should stay paper-only until a later milestone explicitly changes that boundary.
+- Runtime persistence should stay transparent enough that operators can tell whether a portfolio is fresh or resumed.
+- Latest-state JSON should remain available even as SQLite history grows, so current workstation routes and panels stay stable.
+- Multi-asset valuation must preserve the invariant:
+  - `portfolio_value = cash_usd + sum(position.quantity * position.market_price)`
+  - invariant violations now raise instead of silently persisting corrupted portfolio state
+- Reset now clears latest JSON state and recreates the SQLite ledger for a truly fresh experiment.
+- History routes currently expose raw recent rows with `LIMIT` only; they do not yet apply experiment-phase filtering or reset-based scoping.
+- Because the repo root is bind-mounted into Docker, SQLite history is directly host-visible rather than container-private.
+- Container runtime should not be treated as proof that live Kraken CLI is available inside Docker.
+- The packaged GRU should remain honestly framed as a regime signal input; portfolio-control behavior belongs in the policy/risk/execution layers rather than being implied by the model alone.
+- System-state adapter labels should remain truthful about the active packaged runtime and any fallback path rather than reusing stale notebook-era wording.
+- SQLite portfolio history should be interpreted from `positions_json` for multi-asset truth; legacy BTC helper columns are compatibility output only.
