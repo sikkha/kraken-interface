@@ -34,12 +34,12 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
       target: development
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
     environment:
-      VITE_API_BASE_URL: http://localhost:8002/api
+      VITE_DEV_API_TARGET: http://backend:8000
       VITE_DEV_HOST: 0.0.0.0
       VITE_DEV_PORT: 5173
     ports:
